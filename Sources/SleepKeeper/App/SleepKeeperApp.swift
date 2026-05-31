@@ -9,7 +9,7 @@ struct SleepKeeperApp: App {
     var body: some Scene {
         WindowGroup("SleepKeeper", id: "main") {
             ContentView(model: appState.model)
-                .frame(minWidth: 460, minHeight: 360)
+                .frame(minWidth: 680, minHeight: 640)
         }
         .commands {
             CommandMenu("SleepKeeper") {

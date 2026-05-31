@@ -1,38 +1,41 @@
+import SleepKeeperCore
 import SwiftUI
 
 struct ContentView: View {
     @ObservedObject var model: SleepKeeperModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 28) {
-            HeaderView()
+        ScrollView {
+            VStack(alignment: .leading, spacing: 28) {
+                HeaderView()
 
-            StatusPanel(model: model)
+                StatusPanel(model: model)
 
-            DisplayPanel(model: model)
+                DisplayPanel(model: model)
 
-            LaunchPanel(model: model)
+                LaunchPanel(model: model)
 
-            Spacer(minLength: 0)
+                StorageCleanerPanel(model: model)
 
-            HStack {
-                Text("Shortcut: Command Shift K")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                HStack {
+                    Text("Shortcut: Command Shift K")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
 
-                Spacer()
+                    Spacer()
 
-                Button {
-                    model.toggle()
-                } label: {
-                    Label(model.isEnabled ? "Turn Off" : "Turn On", systemImage: model.isEnabled ? "pause.fill" : "play.fill")
+                    Button {
+                        model.toggle()
+                    } label: {
+                        Label(model.isEnabled ? "Turn Off" : "Turn On", systemImage: model.isEnabled ? "pause.fill" : "play.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
             }
+            .padding(28)
         }
-        .padding(28)
-        .alert("Power Assertion Failed", isPresented: errorBinding) {
+        .alert("SleepKeeper Error", isPresented: errorBinding) {
             Button("OK") {
                 model.clearError()
             }
@@ -46,6 +49,146 @@ struct ContentView: View {
             get: { model.lastError != nil },
             set: { if !$0 { model.clearError() } }
         )
+    }
+}
+
+private struct StorageCleanerPanel: View {
+    @ObservedObject var model: SleepKeeperModel
+    @State private var isConfirmingTrash = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 14) {
+                Image(systemName: "externaldrive.fill")
+                    .font(.system(size: 32, weight: .semibold))
+                    .foregroundStyle(.blue)
+                    .frame(width: 42)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Storage cleaner")
+                        .font(.headline)
+                    Text(model.storageResultsSummaryText)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if model.storageSkippedItemCount > 0 {
+                        Text("\(model.storageSkippedItemCount) items skipped because they could not be accessed.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Spacer()
+
+                if model.isStorageScanRunning {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+
+                Button {
+                    model.scanQuickStorage()
+                } label: {
+                    Label("Quick Scan", systemImage: "bolt.fill")
+                }
+                .disabled(model.isStorageScanRunning)
+
+                Button {
+                    model.scanEntireDisk()
+                } label: {
+                    Label("Deep Scan", systemImage: "internaldrive")
+                }
+                .disabled(model.isStorageScanRunning)
+            }
+
+            if !model.storageFiles.isEmpty {
+                VStack(spacing: 10) {
+                    ForEach(model.storageFiles) { file in
+                        StorageFileRow(model: model, file: file)
+                    }
+                }
+
+                HStack {
+                    Text(model.selectedStorageFileIDs.isEmpty ? "Select items to move them to Trash." : "Selected \(model.selectedStorageSummaryText).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Spacer()
+
+                    Button(role: .destructive) {
+                        isConfirmingTrash = true
+                    } label: {
+                        Label("Move to Trash", systemImage: "trash")
+                    }
+                    .disabled(model.selectedStorageFileIDs.isEmpty || model.isStorageScanRunning)
+                }
+            }
+        }
+        .padding(18)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .alert("Move Items to Trash?", isPresented: $isConfirmingTrash) {
+            Button("Move to Trash", role: .destructive) {
+                Task {
+                    await model.moveSelectedStorageFilesToTrash()
+                }
+            }
+
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Move \(model.selectedStorageSummaryText) to Trash. You can recover these files from the Trash.")
+        }
+    }
+}
+
+private struct StorageFileRow: View {
+    @ObservedObject var model: SleepKeeperModel
+    let file: StorageFile
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Toggle(isOn: Binding(
+                get: { model.isStorageFileSelected(file) },
+                set: { model.setStorageFile(file, selected: $0) }
+            )) {
+                EmptyView()
+            }
+            .toggleStyle(.checkbox)
+
+            Image(systemName: file.kind == .folder ? "folder.fill" : "doc.fill")
+                .foregroundStyle(.secondary)
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(file.url.lastPathComponent)
+                    .font(.callout.weight(.medium))
+                    .lineLimit(1)
+
+                Text(file.cleanupReason)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                Text(file.url.deletingLastPathComponent().path)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            Spacer(minLength: 12)
+
+            Text(model.formatByteCount(file.byteCount))
+                .font(.callout.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .frame(minWidth: 86, alignment: .trailing)
+
+            Button {
+                model.revealStorageFile(file)
+            } label: {
+                Label("Show", systemImage: "magnifyingglass")
+            }
+        }
+        .padding(10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 

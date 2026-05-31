@@ -9,6 +9,14 @@ It has two separate modes:
 
 The app uses macOS power assertions through IOKit. It does not simulate mouse or keyboard input.
 
+It also includes a storage cleaner for finding files and folders that can free space quickly:
+
+- Quick Scan checks downloads, large personal files, regenerable caches, Xcode data, simulator data, and common project dependency/build folders such as `node_modules`, `.build`, `Pods`, and `build`.
+- Deep Scan can scan the whole disk from `/` when you need a slower, broader search.
+- Shows items that are at least 100 MB.
+- Lets you reveal items in Finder or move selected items to the macOS Trash.
+- Does not permanently delete files or clean system folders automatically.
+
 ## Requirements
 
 - macOS 14 or later
