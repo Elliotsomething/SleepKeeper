@@ -15,6 +15,8 @@ struct ContentView: View {
 
                 LaunchPanel(model: model)
 
+                PerformanceOptimizerPanel(model: model)
+
                 StorageCleanerPanel(model: model)
 
                 HStack {
@@ -49,6 +51,147 @@ struct ContentView: View {
             get: { model.lastError != nil },
             set: { if !$0 { model.clearError() } }
         )
+    }
+}
+
+private struct PerformanceOptimizerPanel: View {
+    @ObservedObject var model: SleepKeeperModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 14) {
+                Image(systemName: "speedometer")
+                    .font(.system(size: 32, weight: .semibold))
+                    .foregroundStyle(.orange)
+                    .frame(width: 42)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Performance optimizer")
+                        .font(.headline)
+                    Text(model.performanceTitleText)
+                        .font(.callout.weight(.medium))
+                    Text(model.performanceSummaryText)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+
+                if model.isPerformanceAnalysisRunning {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+
+                Button {
+                    model.analyzePerformance()
+                } label: {
+                    Label("Analyze", systemImage: "waveform.path.ecg")
+                }
+                .disabled(model.isPerformanceAnalysisRunning)
+
+                Button {
+                    model.openActivityMonitor()
+                } label: {
+                    Label("Activity Monitor", systemImage: "app.badge")
+                }
+            }
+
+            if !model.performanceMetricRows.isEmpty {
+                LazyVGrid(columns: [
+                    GridItem(.flexible(), spacing: 10),
+                    GridItem(.flexible(), spacing: 10)
+                ], spacing: 10) {
+                    ForEach(model.performanceMetricRows, id: \.0) { row in
+                        PerformanceMetricTile(title: row.0, value: row.1)
+                    }
+                }
+
+                Text(model.performanceRecommendationText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if !model.performanceTopProcesses.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Highest CPU processes")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    ForEach(model.performanceTopProcesses) { process in
+                        PerformanceProcessRow(model: model, process: process)
+                    }
+                }
+            }
+
+            HStack {
+                Text("Optimization actions are manual to avoid data loss.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                Button {
+                    model.scanQuickStorage()
+                } label: {
+                    Label("Quick Clean", systemImage: "bolt.fill")
+                }
+                .disabled(model.isStorageScanRunning)
+            }
+        }
+        .padding(18)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+private struct PerformanceMetricTile: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.callout.monospacedDigit().weight(.medium))
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+private struct PerformanceProcessRow: View {
+    @ObservedObject var model: SleepKeeperModel
+    let process: PerformanceProcess
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "cpu")
+                .foregroundStyle(.secondary)
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(process.name)
+                    .font(.callout.weight(.medium))
+                    .lineLimit(1)
+                Text("PID \(process.pid)  Memory \(model.formatByteCount(process.residentMemoryBytes))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Text(String(format: "%.1f%% CPU", process.cpuPercentage))
+                .font(.callout.monospacedDigit())
+                .foregroundStyle(process.cpuPercentage >= 40 ? .orange : .secondary)
+                .frame(minWidth: 86, alignment: .trailing)
+        }
+        .padding(10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 

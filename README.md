@@ -17,6 +17,13 @@ It also includes a storage cleaner for finding files and folders that can free s
 - Lets you reveal items in Finder or move selected items to the macOS Trash.
 - Does not permanently delete files or clean system folders automatically.
 
+SleepKeeper can also inspect common causes of system lag:
+
+- Reads CPU load, memory free percentage, swap usage, disk space, and top CPU processes.
+- Flags likely CPU pressure, memory pressure, high-swap history, or low storage.
+- Opens Activity Monitor for manual review.
+- Does not automatically quit apps or kill processes.
+
 ## Requirements
 
 - macOS 14 or later

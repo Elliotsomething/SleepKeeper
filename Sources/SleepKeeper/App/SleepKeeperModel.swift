@@ -13,10 +13,14 @@ final class SleepKeeperModel: ObservableObject {
     @Published private(set) var storageSkippedItemCount = 0
     @Published private(set) var storageScanDescription = StorageScanScope.quickCleanDescription
     @Published var selectedStorageFileIDs: Set<StorageFile.ID> = []
+    @Published private(set) var performanceMetrics: PerformanceMetrics?
+    @Published private(set) var performanceDiagnosis: PerformanceDiagnosis?
+    @Published private(set) var isPerformanceAnalysisRunning = false
 
     private let controller: SleepKeeperController
     private let launchAtLoginManager: LaunchAtLoginManager
     private let storageTrashService: StorageTrashService
+    private let systemPerformanceService: SystemPerformanceService
     private let defaults: UserDefaults
     private let enabledKey = "sleepKeeper.isEnabled"
     private let displayAwakeKey = "sleepKeeper.displayAwakeEnabled"
@@ -25,11 +29,13 @@ final class SleepKeeperModel: ObservableObject {
         controller: SleepKeeperController = SleepKeeperController(),
         launchAtLoginManager: LaunchAtLoginManager = LaunchAtLoginManager(),
         storageTrashService: StorageTrashService = StorageTrashService(),
+        systemPerformanceService: SystemPerformanceService = SystemPerformanceService(),
         defaults: UserDefaults = .standard
     ) {
         self.controller = controller
         self.launchAtLoginManager = launchAtLoginManager
         self.storageTrashService = storageTrashService
+        self.systemPerformanceService = systemPerformanceService
         self.defaults = defaults
 
         if defaults.bool(forKey: enabledKey) {
@@ -95,6 +101,38 @@ final class SleepKeeperModel: ObservableObject {
         return "\(storageFiles.count) cleanup candidates found across \(storageScannedFileCount) scanned files."
     }
 
+    var performanceSummaryText: String {
+        if isPerformanceAnalysisRunning {
+            return "Analyzing CPU, memory, swap, and storage..."
+        }
+
+        return performanceDiagnosis?.detail ?? "Analyze CPU load, swap usage, disk space, and top processes."
+    }
+
+    var performanceTitleText: String {
+        performanceDiagnosis?.title ?? "System performance"
+    }
+
+    var performanceRecommendationText: String {
+        performanceDiagnosis?.recommendations.joined(separator: " ") ?? "Run analysis before optimizing."
+    }
+
+    var performanceTopProcesses: [PerformanceProcess] {
+        performanceMetrics?.topProcesses ?? []
+    }
+
+    var performanceMetricRows: [(String, String)] {
+        guard let metrics = performanceMetrics else { return [] }
+
+        let diskFreeRatio = metrics.diskTotalBytes > 0 ? Double(metrics.diskAvailableBytes) / Double(metrics.diskTotalBytes) : 0
+        return [
+            ("Free memory", "\(Int(metrics.memoryFreePercentage.rounded()))%"),
+            ("Swap used", formatByteCount(metrics.swapUsedBytes)),
+            ("Load average", String(format: "%.2f / %d cores", metrics.loadAverage1Minute, metrics.processorCount)),
+            ("Disk available", "\(formatByteCount(metrics.diskAvailableBytes)) (\(Int((diskFreeRatio * 100).rounded()))%)")
+        ]
+    }
+
     func toggle() {
         setEnabled(!isEnabled)
     }
@@ -151,6 +189,23 @@ final class SleepKeeperModel: ObservableObject {
 
     func refreshLaunchAtLoginStatus() {
         launchAtLoginEnabled = launchAtLoginManager.isEnabled
+    }
+
+    func analyzePerformance() {
+        guard !isPerformanceAnalysisRunning else { return }
+
+        isPerformanceAnalysisRunning = true
+        Task {
+            let metrics = await systemPerformanceService.captureMetrics()
+            performanceMetrics = metrics
+            performanceDiagnosis = PerformanceAdvisor().diagnose(metrics)
+            isPerformanceAnalysisRunning = false
+            lastError = nil
+        }
+    }
+
+    func openActivityMonitor() {
+        systemPerformanceService.openActivityMonitor()
     }
 
     func scanStorage() {
